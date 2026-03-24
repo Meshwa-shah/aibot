@@ -26,15 +26,15 @@ export const signup = async (req, res) => {
 
 export const login = async (req, res) => {
     try {
-        const { name, email, password } = req.body;
-        const { data, error } = await supabase.from('admin').select('*').eq('email', email).eq('name', name).limit(1).single();
+        const {email, password } = req.body;
+        const { data, error } = await supabase.from('users').select('*').eq('email', email).limit(1).single();
         if (error) {
             res.status(201).json({ success: false, message: "wrong email or name" });
         }
         else {
             const decrypt = await bcrypt.compare(password, data.password);
             if (decrypt) {
-                const token = jwt.sign({ name, email }, process.env.JWT_KEY, { expiresIn: '1d' });
+                const token = jwt.sign({ email }, process.env.JWT_KEY, { expiresIn: '1d' });
                 res.cookie('token', token, { httpOnly: true, sameSite: 'Lax', secure: false, path: '/' });
                 res.status(201).json({ success: true, message: "welcome back", data: data });
             }
@@ -81,7 +81,8 @@ export const verify = async (req, res) => {
 
 export const fetchusers = async (req, res) => {
     try{
-        const { data, error } = await supabase.from('users').select('*');
+        const { company_id } = req.body;
+        const { data, error } = await supabase.from('chat_sessions').select('*').eq("company_id", company_id);
         if(error){
             return res.status(201).json({ success:false, message:"something went wrong" });
         }

@@ -1,10 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import { Send, Bot, User, Plus } from "lucide-react";
-import { io } from "socket.io-client";
+import { io, Socket } from "socket.io-client";
 import axios from "axios";
 import Markdown from "react-markdown";
 import { Nav } from "./Nav";
 import Yourchats from "./Yourchats";
+
+/* ---------------- VISITOR + COMPANY ---------------- */
+
+// const company_id = "dental_clinic";
+// localStorage.setItem("company_id", company_id)
 
 const getVisitorId = () => {
   let id = localStorage.getItem("visitor_id");
@@ -17,9 +22,7 @@ const getVisitorId = () => {
 
 const visitor_id = getVisitorId();
 
-const socket = io(import.meta.env.VITE_BACK_URL, {
-  auth: { visitor_id }
-});
+/* ---------------- TYPES ---------------- */
 
 type Role = "user" | "ai";
 
@@ -27,6 +30,8 @@ type Message = {
   role: Role;
   text: string;
 };
+
+/* ---------------- COMPONENT ---------------- */
 
 export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -38,67 +43,37 @@ export default function Chat() {
   const [activeTitle, setActiveTitle] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const email: string = "meshwashah91@gmail.com"; 
 
-  /* 🔹 Load latest chat on reload */
+  /* ---------------- SOCKET INIT (ONCE) ---------------- */
+
   useEffect(() => {
-    async function loadLatestChat() {
-      const res = await axios.post(
-        `${import.meta.env.VITE_BACK_URL}/latest-chat`,
-        { visitor_id }
-      );
+    const params = new URLSearchParams(window.location.search);
+    const companyId = params.get("company") ||
+      localStorage.getItem("company_id") ||
+      "dental_clinic";
 
-      setActiveTitle(res.data.title);
-      setTitle(res.data.title);
-    }
-
-    loadLatestChat();
+    localStorage.setItem("company_id", companyId);
+    console.log(localStorage.getItem("company_id"));
   }, []);
 
-  /* 🔹 Load chat titles */
   useEffect(() => {
-    async function loadTitles() {
-      const res = await axios.post(
-        `${import.meta.env.VITE_BACK_URL}/chat-titles`,
-        { visitor_id }
-      );
-      setChatTitles(res.data.titles || []);
-    }
-
-    loadTitles();
-  }, []);
-
-  /* 🔹 Load messages for active chat */
-
-  useEffect(() => {
-    async function loadMessages() {
-      if (!activeTitle) return;
-
-      const res = await axios.post(
-        `${import.meta.env.VITE_BACK_URL}/chats`,
-        {
-          visitor_id,
-          title: activeTitle
-        }
-      );
-
-      const dbMessages = res.data.data || [];
-
-      // ✅ Do NOT overwrite socket messages if DB empty
-      if (dbMessages.length > 0) {
-        setMessages(dbMessages);
+    const company_id = localStorage.getItem("company_id");
+    const socket = io(import.meta.env.VITE_BACK_URL, {
+      auth: {
+        visitor_id,
+        company_id,
+        email
       }
-    }
+    });
 
-    loadMessages();
-  }, [activeTitle]);
+    socketRef.current = socket;
 
-
-  /* 🔹 Socket listeners */
-  useEffect(() => {
     socket.on("bot_message", (data) => {
       setTyping(false);
 
-      if (!title && data.title) {
+    if (!title && data.title) {
         setTitle(data.title);
         setActiveTitle(data.title);
         setChatTitles((prev) =>
@@ -115,26 +90,78 @@ export default function Chat() {
     socket.on("bot_typing", () => setTyping(true));
 
     return () => {
-      socket.off("bot_message");
-      socket.off("bot_typing");
+      socket.disconnect();
     };
-  }, [title]);
+  }, []); // ✅ NO DEPENDENCIES
 
-  /* 🔹 Auto scroll */
+  /* ---------------- LOAD LATEST CHAT ---------------- */
+
+  useEffect(() => {
+    async function loadLatestChat() {
+      const company_id = localStorage.getItem("company_id");
+      const res = await axios.post(
+        `${import.meta.env.VITE_BACK_URL}/latest-chat`,
+        { visitor_id, company_id }
+      );
+      console.log(res)
+      setActiveTitle(res.data.title);
+      setTitle(res.data.title);
+    }
+
+    loadLatestChat();
+  }, []);
+
+  /* ---------------- LOAD CHAT TITLES ---------------- */
+
+  useEffect(() => {
+    async function loadTitles() {
+      const company_id = localStorage.getItem("company_id");
+      const res = await axios.post(
+        `${import.meta.env.VITE_BACK_URL}/chat-titles`,
+        { visitor_id, company_id }
+      );
+
+      setChatTitles(res.data.titles || []);
+    }
+
+    loadTitles();
+  }, []);
+
+  /* ---------------- LOAD MESSAGES ---------------- */
+
+  useEffect(() => {
+    async function loadMessages() {
+      if (!activeTitle) return;
+      const company_id = localStorage.getItem("company_id");
+      const res = await axios.post(
+        `${import.meta.env.VITE_BACK_URL}/chats`,
+        {
+          visitor_id,
+          company_id,
+          title: activeTitle
+        }
+      );
+
+      setMessages(res.data.data || []);
+    }
+
+    loadMessages();
+  }, [activeTitle]);
+
+  /* ---------------- AUTO SCROLL ---------------- */
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, typing]);
 
-  /* 🔹 Send message */
+  /* ---------------- SEND MESSAGE ---------------- */
+
   const sendMessage = () => {
     if (!input.trim()) return;
 
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", text: input }
-    ]);
+    setMessages((prev) => [...prev, { role: "user", text: input }]);
 
-    socket.emit("user_message", {
+    socketRef.current?.emit("user_message", {
       message: input,
       title
     });
@@ -142,14 +169,15 @@ export default function Chat() {
     setInput("");
   };
 
-  /* 🔹 New chat */
+  /* ---------------- NEW CHAT ---------------- */
+
   const newChat = () => {
     setTitle(null);
     setActiveTitle(null);
-    setMessages([
-      { role: "ai", text: "Hello 👋 How can I help you?" }
-    ]);
+    setMessages([]);
   };
+
+  /* ---------------- UI ---------------- */
 
   return (
     <div className="min-h-screen bg-linear-to-br from-[#0b1020] via-[#0f1a2f] to-black flex flex-col">
@@ -168,6 +196,7 @@ export default function Chat() {
         <div className="flex-1 flex justify-center p-4">
           <div className="w-full max-w-3xl h-[80vh] bg-white/5 backdrop-blur-xl rounded-xl flex flex-col border border-gray-700">
 
+            {/* HEADER */}
             <div className="p-4 border-b border-slate-700 flex items-center gap-2">
               <Bot className="text-indigo-400" />
               <h1 className="text-white font-semibold">
@@ -175,6 +204,7 @@ export default function Chat() {
               </h1>
             </div>
 
+            {/* MESSAGES */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
               <button
                 onClick={newChat}
@@ -182,17 +212,6 @@ export default function Chat() {
               >
                 <Plus size={18} />
               </button>
-              {/* Greeting for Introduction */}
-              {activeTitle === "Introduction" && (
-                <div className="flex justify-start">
-                  <div className="max-w-[70%] px-4 py-3 rounded-xl text-sm bg-slate-700 text-slate-200">
-                    <div className="flex items-center gap-1 text-xs opacity-70 mb-1">
-                      <Bot size={12} /> AI
-                    </div>
-                    Hello 👋 Who are you?
-                  </div>
-                </div>
-              )}
 
               {messages.map((msg, i) => (
                 <div
@@ -202,8 +221,8 @@ export default function Chat() {
                 >
                   <div
                     className={`max-w-[70%] px-4 py-3 rounded-xl text-sm ${msg.role === "user"
-                      ? "bg-indigo-600 text-white"
-                      : "bg-slate-700 text-slate-200"
+                        ? "bg-indigo-600 text-white"
+                        : "bg-slate-700 text-slate-200"
                       }`}
                   >
                     <div className="flex items-center gap-1 text-xs opacity-70 mb-1">
@@ -222,6 +241,7 @@ export default function Chat() {
               <div ref={messagesEndRef} />
             </div>
 
+            {/* INPUT */}
             <div className="p-4 border-t border-slate-700 flex gap-2">
               <input
                 value={input}
@@ -237,7 +257,6 @@ export default function Chat() {
                 <Send size={18} />
               </button>
             </div>
-
           </div>
         </div>
       </div>

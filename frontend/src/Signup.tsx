@@ -18,7 +18,7 @@ const Signup: React.FC = () => {
     }
     try {
       setloading(true);
-      const add = await axios.post(`${import.meta.env.VITE_BACK_URL}/signup`,
+      const add = await axios.post(`${import.meta.env.VITE_BACK_URL}/user/signup`,
         { name: name, email: email, password: password }, { withCredentials: true }
       );
       if (add.data.success === true) {

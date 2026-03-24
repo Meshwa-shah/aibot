@@ -11,19 +11,20 @@ const Login: React.FC = () => {
   const [loading, setloading] = useState<boolean>(false);
   const nav: NavigateFunction = useNavigate();
 
-  async function login() {
-    if (!name || !email || !password) {
+  async function login(){
+    if (!email || !password){
       toast.error("please fill it correctly");
       return
     }
     try {
       setloading(true);
-      const add = await axios.post(`${import.meta.env.VITE_BACK_URL}/login`,
-        { name: name, email: email, password: password }, { withCredentials: true }
+      const add = await axios.post(`${import.meta.env.VITE_BACK_URL}/user/login`,
+        { email: email, password: password }, { withCredentials: true }
       );
       if (add.data.success === true) {
         toast.success(add.data.message);
         nav('/dashboard');
+        localStorage.setItem("id", add.data.data.company_id);
       }
       else {
         toast.error(add.data.message);
@@ -58,19 +59,8 @@ const Login: React.FC = () => {
 
         {/* Form */}
         <form className="px-6 py-6 space-y-4">
-          {/* Name */}
-          <div>
-            <label className="block text-sm text-white/70 mb-1">
-              Name
-            </label>
-            <input
-              type="text"
-              placeholder="John Doe"
-              className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-purple-500"
-              onChange={(e) => setname(e.target.value)}
-            />
-          </div>
-
+    
+         
           {/* Email */}
           <div>
             <label className="block text-sm text-white/70 mb-1">
@@ -108,12 +98,7 @@ const Login: React.FC = () => {
         </form>
 
         {/* Footer */}
-        <div className="px-6 pb-5 text-center text-sm text-white/50">
-          Dont't have an account?{" "}
-          <span className="text-purple-400 hover:underline cursor-pointer">
-            <a href="/signup">Sign up</a>
-          </span>
-        </div>
+        
       </div>
     </div>
   );
