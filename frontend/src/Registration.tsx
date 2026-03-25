@@ -15,7 +15,12 @@ const Registration = () => {
     const [loading, setloading] = useState(false);
     const [plans, setplans] = useState<Array<any>>([]);
     const [selectedPlan, setSelectedPlan] = useState("");
-    console.log(selectedPlan);
+    const [duration, setduration] = useState(0);
+
+    function set(name: string, duration:number){
+        setSelectedPlan(name)
+        setduration(duration);
+    }
 
 
     useEffect(() => {
@@ -45,7 +50,8 @@ const Registration = () => {
                 email: email,
                 password: password,
                 companyName: name,
-                type: selectedPlan
+                type: selectedPlan,
+                duration: duration
             });
 
             localStorage.setItem("token", res.data.token);
@@ -149,7 +155,7 @@ const Registration = () => {
                                         name="plan"
                                         value={plan.id}
                                         checked={selectedPlan === plan.name}
-                                        onChange={() => setSelectedPlan(plan.name)}
+                                        onChange={() => set(plan.name, plan.duration_days)}
                                     />
 
                                 </label>

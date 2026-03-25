@@ -323,7 +323,7 @@ app.post("/scrape-website", async (req, res) => {
   const result = await scrapeAndSave(url, company_id);
 
 
-  res.status(201).json({ success: true, data: result  });
+  res.status(201).json({ success: true, data: result });
 
 });
 
@@ -407,6 +407,7 @@ app.post('/extrainfo', async (req, res) => {
       });
     }
     const script = generateEmbedScript(company_id);
+    console.log(script);
     const { data: sc } = await supabase.from("users").insert({
       script: script
     }).eq("company_id", company_id);
@@ -614,6 +615,10 @@ app.post("/admin/toggle-active", async (req, res) => {
       .select("isactive")
       .eq("company_id", company_id)
       .single();
+
+    if(user.isactive === false){
+      const {data:company} = await supabase.from("chats").delete().eq("company_id", company_id).eq("title", "System")
+    }  
 
     const { data, error } = await supabase
       .from("users")
@@ -843,7 +848,7 @@ app.get('/getplans', async (req, res) => {
         message: error.message
       })
     }
-    else{
+    else {
       return res.json({
         success: true,
         data: data
@@ -857,6 +862,24 @@ app.get('/getplans', async (req, res) => {
     });
   }
 })
+
+async function isChatbotActive(company_id) {
+  const { data, error } = await supabase
+    .from("users")
+    .select("isactive, is_paid")
+    .eq("company_id", company_id)
+    .maybeSingle();
+
+  if (error) {
+    console.error("User fetch error:", error);
+    return false;
+  }
+
+  // ❗ If no user found → treat as inactive
+  if (!data) return false;
+
+  return data.isactive;
+}
 /* ---------------- SOCKET ---------------- */
 
 io.on("connection", async (socket) => {
@@ -865,26 +888,28 @@ io.on("connection", async (socket) => {
 
   if (!visitor_id || !company_id) return socket.disconnect();
 
+
   try {
 
     const session = await getOrCreateSession(visitor_id, company_id);
-    // const { data: check } = await supabase.from("users").select("isactive").eq("company_id", company_id);
+    const isActive = await isChatbotActive(company_id);
 
-    // if(check[0].isactive === false){
-    //      socket.emit("bot_message", {
-    //       message: "The chat bot is temporarily closed",
-    //       title: "Introduction"
-    //     });
-    //     await supabase.from("chats").insert({
-    //       session_id: session.id,
-    //       company_id,
-    //       role: "ai",
-    //       text: "The chat bot is temporarily closed",
-    //       title: "Introduction"
-    //     });
+    if (!isActive) {
+      await supabase.from("chats").insert({
+        session_id: session.id,
+        role: "ai",
+        text: "This chatbot is temporarily closed",
+        title: "System",
+        company_id
+      });
+      socket.emit("bot_message", {
+        message: "This chatbot is temporarily closed.",
+        title: "System"
+      });
 
-    //     return
-    //   }
+      return socket.disconnect(); // 🔴 stop further execution
+    }
+
 
 
 
@@ -929,6 +954,13 @@ io.on("connection", async (socket) => {
         socket.emit("bot_typing");
 
         const session = await getOrCreateSession(visitor_id, company_id);
+
+        const isActive = await isChatbotActive(company_id);
+
+        if (!isActive) {
+         return
+        }
+
 
         /* ---------- RESET INACTIVITY TIMER ---------- */
 

@@ -21,7 +21,7 @@ function generateCompanyId(companyName) {
   return `${slug}-${random}`;
 }
 
-export const generateEmbedScript = async(companyId) => {
+export const generateEmbedScript = (companyId) => {
   return `<script src="https://yourdomain.com/chatbot.js" data-company-id="${companyId}"></script>`;
 };
 
@@ -62,14 +62,14 @@ export const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export const usignup = async (req, res) => {
   try {
 
-    const { email, password, companyName, type } = req.body;
+    const { email, password, companyName, type, duration } = req.body;
 
     if (!email || !password || !companyName) {
       return res.status(400).json({
         message: "Email and password required"
       });
     }
-    if(!emailRegex.test(email)){
+    if (!emailRegex.test(email)) {
       return res.status(400).json({
         message: " Valid Email required"
       })
@@ -77,6 +77,14 @@ export const usignup = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const companyId = generateCompanyId(companyName);
+    const days = duration.match(/\d+/)
+      ? parseInt(duration.match(/\d+/)[0])
+      : 0;
+
+    const start = new Date();
+    const end = new Date();
+
+    end.setDate(start.getDate() + days);
 
     const { data, error } = await supabase
       .from("users")
@@ -85,20 +93,21 @@ export const usignup = async (req, res) => {
         password: hashedPassword,
         company_id: companyId,
         companyname: companyName,
-        is_paid: type === "Free" ? "FALSE" : "TRUE"
+        is_paid: type === "Free" ? "FALSE" : "TRUE",
+        trial_end: end
       })
       .select()
       .single();
 
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
 
-        to: email,
+      to: email,
 
-        subject: "Your credentials",
+      subject: "Your credentials",
 
-        text:`Your email is : ${email}, your password is: ${password} and your company id is: ${companyId}`
-      })
+      text: `Your email is : ${email}, your password is: ${password} and your company id is: ${companyId}`
+    })
 
     if (error) {
       return res.status(400).json({
