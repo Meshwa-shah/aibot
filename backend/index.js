@@ -431,7 +431,166 @@ app.post('/extrainfo', async (req, res) => {
   }
 })
 
-// ---- token usage ---- //
+// ---- token usage related apis  ---- //
+
+app.get('/gettodaytokens', async (req, res) => {
+  try {
+
+    const now = new Date();
+
+    const startOfDay = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    );
+
+    const endOfDay = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1
+    );
+
+    const { data, error } = await supabase
+      .from("chats")
+      .select("total_tokens")
+      .gte("created_at", startOfDay.toISOString())
+      .lt("created_at", endOfDay.toISOString());
+
+    if (error) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+
+    const total = data.reduce(
+      (sum, row) => sum + (row.total_tokens || 0),
+      0
+    );
+
+    res.json({
+      success: true,
+      total_tokens: total,
+      message: "fetched all tokens of today"
+    });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/getcurrentmonthtokens', async(req, res) => {
+  try {
+
+    const now = new Date();
+
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const { data, error } = await supabase
+      .from("chats")
+      .select("total_tokens")
+      .gte("created_at", startOfMonth.toISOString())
+      .lt("created_at", startOfNextMonth.toISOString());
+
+    if (error) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+
+    const total = data.reduce(
+      (sum, row) => sum + (row.total_tokens || 0),
+      0
+    );
+
+    res.json({
+      success: true,
+      message: "total tokens used in this month",
+      month: now.toLocaleString("default", {
+        month: "long",
+        year: "numeric"
+      }),
+      total_tokens: total
+    });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+
+});
+
+app.get('/gettotaltokens', async(req, res) => {
+   try {
+
+    const { data, error } = await supabase
+      .from("chats")
+      .select("total_tokens");
+
+    if (error) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+
+    const total = data.reduce(
+      (sum, row) => sum + (row.total_tokens || 0),
+      0
+    );
+
+    res.json({
+      success: true,
+      total_tokens: total,
+      message: "your total tokens"
+    });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/getmonthlytokens', async(req, res) => {
+  try {
+
+    const { data, error } = await supabase
+      .from("chats")
+      .select("created_at, total_tokens");
+
+    if (error) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+
+    const monthly = {};
+
+    data.forEach((row) => {
+      const date = new Date(row.created_at);
+
+      const key = date.toLocaleString("default", {
+        month: "short",
+        year: "numeric"
+      });
+
+      if (!monthly[key]) {
+        monthly[key] = 0;
+      }
+
+      monthly[key] += row.total_tokens || 0;
+    });
+
+    const result = Object.entries(monthly).map(([month, tokens]) => ({
+      month,
+      total_tokens: tokens
+    }));
+
+
+    result.sort((a, b) => new Date(a.month) - new Date(b.month));
+
+    res.json({
+      success: true,
+      data: result,
+      message: "your monthly token usage"
+    });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+
+})
+
+
 app.get("/token-usage/:company_id", async (req, res) => {
 
   const { company_id } = req.params;
@@ -1226,5 +1385,5 @@ io.on("connection", async (socket) => {
 });
 
 server.listen(port, "0.0.0.0", () => {
-  console.log(`Server running on "http://192.168.1.18:${port}"`);
+  console.log(`Server running on "http://192.168.1.16:${port}"`);
 });

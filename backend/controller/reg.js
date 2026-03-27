@@ -62,7 +62,7 @@ export const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export const usignup = async (req, res) => {
   try {
 
-    const { email, password, companyName, type, duration } = req.body;
+    const { email, password, companyName, type, duration, phone } = req.body;
 
     if (!email || !password || !companyName) {
       return res.status(400).json({
@@ -94,7 +94,8 @@ export const usignup = async (req, res) => {
         company_id: companyId,
         companyname: companyName,
         is_paid: type === "Free" ? "FALSE" : "TRUE",
-        trial_end: end
+        trial_end: end,
+        phone: `+91${phone}`
       })
       .select()
       .single();
@@ -176,7 +177,7 @@ export const ulogin = async (req, res) => {
     
     res.json({
       message: "Login successful",
-      email: email,
+      data:data,
       token:token,
     });
 
@@ -204,8 +205,8 @@ export const ulogout = async (req, res) => {
 
 export const getuprofile = async (req, res) => {
   try{
-    const { email } = req.body; 
-    const { data, error  } = await supabase.from("users").select("*").eq("email", email);
+    const { id } = req.body; 
+    const { data, error } = await supabase.from("users").select("*").eq("id", id);
     if(error){
        return res.json({
         success: false,
@@ -215,6 +216,7 @@ export const getuprofile = async (req, res) => {
     else{
       return res.json({
         success: true,
+        message: "Your profile fetched",
         data:data[0]
       })
     }
@@ -229,11 +231,12 @@ export const getuprofile = async (req, res) => {
 
 export const edituprofile = async (req, res) => {
   try{
-    const { name, email, oldemail } = req.body;
+    const { name, email, phone, id } = req.body;
     const { data:profile, error } = await supabase.from("users").update({
       companyname:name,
-      email
-    }).eq("email", oldemail).select();
+      email,
+      phone: `+91${phone}`
+    }).eq("id", id).select();
 
     if(error){
        return res.json({
@@ -330,7 +333,33 @@ export const changeupassword = async (req, res) => {
   }
 };
 
+export const getUsers = async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .order("created_at", { ascending: false }); // 🔥 newest first
 
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: data,
+      message: "your users"
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+};
 
 
 
@@ -367,7 +396,7 @@ export const Slogin = async (req, res) => {
 
     res.json({
       message: "Login successful",
-      name: data.email,
+      data: data,
       token:token
     });
 
@@ -393,8 +422,7 @@ export const Slogout = async (req, res) => {
 
 export const getprofile = async (req, res) => {
   try{
-    const { email } = req.body; 
-    const { data, error  } = await supabase.from("admin").select("*").eq("email", email);
+    const { data, error } = await supabase.from("admin").select("*")
     if(error){
        return res.json({
         success: false,
@@ -404,7 +432,8 @@ export const getprofile = async (req, res) => {
     else{
       return res.json({
         success: true,
-        data:data[0]
+        data:data[0],
+        message: "profile fetched"
       })
     }
   }
@@ -418,11 +447,12 @@ export const getprofile = async (req, res) => {
 
 export const editprofile = async (req, res) => {
   try{
-    const { name, email, oldemail } = req.body;
+    const { name, email, phone, id } = req.body;
     const { data:profile, error } = await supabase.from("admin").update({
       name,
-      email
-    }).eq("email", oldemail).select();
+      email,
+      phone: `+91${phone}`
+    }).eq("id", id).select();
 
     if(error){
        return res.json({
@@ -526,31 +556,40 @@ export const changepassword = async (req, res) => {
 
 export const auth = (req, res, next) => {
 
-  try {
+   try {
+    const authHeader = req.headers.authorization;
 
-    const token = req.headers.authorization?.split(" ")[1];
-
-    if (!token) {
+    // Check if header exists
+    if (!authHeader) {
       return res.status(401).json({
-        message: "Unauthorized"
+        success: false,
+        message: "No token provided"
       });
     }
 
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
+    // Extract token (Bearer TOKEN)
+    const token = authHeader.split(" ")[1];
 
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid token format"
+      });
+    }
+
+    // Verify token
+    const decoded = jwt.verify(token, "your_secret_key");
+
+    // Attach user data to request
     req.user = decoded;
 
-    next();
-
+    next(); // go to next function (your controller)
   } catch (err) {
-    res.status(401).json({
-      message: "Invalid token"
+    return res.status(401).json({
+      success: false,
+      message: "Invalid or expired token"
     });
   }
-
 };
 
 

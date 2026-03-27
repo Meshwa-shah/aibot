@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { ulogin, usignup, auth, checkTrial, Slogin, Slogout, editprofile, getprofile, changepassword,
- edituprofile, getuprofile, changeupassword, ulogout
+ edituprofile, getuprofile, changeupassword, ulogout, getUsers
  } from "../controller/reg.js";
 
 const regrouter = Router();
 
 regrouter.post("/signup", usignup);
-regrouter.post("/login", ulogin);
+regrouter.post("/login" , ulogin);
 regrouter.post(
   "/chat",
   auth,
@@ -20,14 +20,15 @@ regrouter.post(
 
   }
 );
-regrouter.post('/superlogin', Slogin);
-regrouter.post('/superlogout', Slogout);
-regrouter.post('/getprofile', getprofile)
-regrouter.post('/editprofile', editprofile);
-regrouter.post('/changepassword', changepassword);
-regrouter.post('/getuserprofile', getuprofile)
-regrouter.post('/edituserprofile', edituprofile);
-regrouter.post('/changeuserpassword', changeupassword);
-regrouter.post('/userLogout', changeupassword);
+regrouter.post('/superlogin' ,Slogin);
+regrouter.post('/superlogout' ,Slogout);
+regrouter.post('/getprofile', auth ,getprofile)
+regrouter.post('/editprofile', auth, editprofile);
+regrouter.post('/changepassword' ,changepassword);
+regrouter.post('/getuserprofile', auth ,getuprofile)
+regrouter.post('/edituserprofile', auth , edituprofile);
+regrouter.post('/changeuserpassword' , changeupassword);
+regrouter.post('/userLogout',  ulogout);
+regrouter.post('/gettotalusers', auth , getUsers);
 
 export default regrouter;
