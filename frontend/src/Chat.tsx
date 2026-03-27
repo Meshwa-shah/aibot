@@ -134,7 +134,7 @@ export default function Chat() {
       if (!activeTitle) return;
       const company_id = localStorage.getItem("company_id");
       const res = await axios.post(
-        `${import.meta.env.VITE_BACK_URL}/chats`,
+        `${import.meta.env.VITE_BACK_URL}/chat/chats`,
         {
           visitor_id,
           company_id,

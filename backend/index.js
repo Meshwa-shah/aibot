@@ -11,6 +11,7 @@ import * as cheerio from "cheerio";
 import userroute from "./routes/userroute.js";
 import addroute from "./routes/addroute.js";
 import regrouter from "./routes/regroute.js";
+import chatroute from "./routes/chatroute.js";
 import { scrapeAndSave } from "./controller/reg.js";
 import { generateEmbedScript } from "./controller/reg.js";
 import { emailRegex } from "./controller/reg.js";
@@ -40,6 +41,7 @@ const port = process.env.PORT || 8081;
 app.use('/user', userroute);
 app.use('/add', addroute);
 app.use('/reg', regrouter);
+app.use('/chat', chatroute);
 
 const groq = new Groq({
   apiKey: process.env.GROQ_KEY
@@ -604,6 +606,7 @@ app.get("/admin/companyname", async (req, res) => {
   }
 });
 
+//------ active , inactive users & toggle active and inactive users ------//
 
 app.post("/admin/toggle-active", async (req, res) => {
   try {
@@ -648,6 +651,110 @@ app.post("/admin/toggle-active", async (req, res) => {
     });
   }
 });
+
+app.get('/getactive', async (req, res) => {
+  try{
+    const { data, error } = await supabase.from("users").select("*").eq("isactive", true);
+    if(error){
+      return res.json({
+        success: false,
+        message: error.message
+      });
+    }
+    else{
+      return res.json({
+        success: true,
+        data:data
+      })
+    }
+  }
+  catch(err){
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+});
+
+app.get('/getinactive', async (req, res) => {
+  try{
+    const { data, error } = await supabase.from("users").select("*").eq("isactive", false);
+    if(error){
+      return res.json({
+        success: false,
+        message: error.message
+      });
+    }
+    else{
+      return res.json({
+        success: true,
+        data:data
+      })
+    }
+  }
+  catch(err){
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+});
+
+app.post('/toggle-toactive', async (req, res) => {
+  try{
+    const { id } = req.body;
+    const { data, error } = await supabase.from("users").update({
+      isactive: true
+    }).eq("company_id", id);
+    if(error){
+       return res.json({
+        success: false,
+        message: error.message
+      });
+    }
+    else{
+      const { data: users } = await supabase.from("users").select("*");
+      return res.json({
+        success: true,
+        data: users
+      });
+    }
+  }
+   catch(err){
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+});
+
+app.post('/toggle-toinactive', async (req, res) => {
+  try{
+    const { id } = req.body;
+    const { data, error } = await supabase.from("users").update({
+      isactive: false
+    }).eq("company_id", id);
+    if(error){
+       return res.json({
+        success: false,
+        message: error.message
+      });
+    }
+    else{
+      const { data: users } = await supabase.from("users").select("*");
+      return res.json({
+        success: true,
+        data: users
+      });
+    }
+  }
+   catch(err){
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+})
 
 /* -------- plans apis -------- */
 app.post("/admin/create-plan", async (req, res) => {
@@ -800,7 +907,7 @@ app.post('/getscript', async (req, res) => {
     else {
       return res.json({
         success: true,
-        data: data
+        data: data[0]
       })
     }
   }
@@ -1118,6 +1225,6 @@ io.on("connection", async (socket) => {
 
 });
 
-server.listen(port, () => {
-  console.log(`Server running on ${port}`);
+server.listen(port, "0.0.0.0", () => {
+  console.log(`Server running on "http://192.168.1.18:${port}"`);
 });

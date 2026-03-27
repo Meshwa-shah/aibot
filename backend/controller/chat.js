@@ -122,3 +122,71 @@ export const addOrCreateKnowledge = async (req, res) => {
     });
   }
 };
+
+export const getTotalChats = async (req, res) => {
+  try {
+
+    const { count, error } = await supabase
+      .from("chats")
+      .select("*", { count: "exact", head: true });
+
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    res.json({
+      success: true,
+      total_chats: count
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+};
+
+export const getCurrentMonthChats = async (req, res) => {
+  try {
+
+    const now = new Date();
+
+    // start of month (e.g. 1st March 2026)
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // start of next month
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const { count, error } = await supabase
+      .from("chats")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", startOfMonth.toISOString())
+      .lt("created_at", startOfNextMonth.toISOString());
+
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    res.json({
+      success: true,
+      month: now.toLocaleString("default", {
+        month: "long",
+        year: "numeric"
+      }),
+      total_chats: count
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+};

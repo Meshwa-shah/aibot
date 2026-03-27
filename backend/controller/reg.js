@@ -123,9 +123,9 @@ export const usignup = async (req, res) => {
 
     res.json({
       message: "Signup successful",
-      token,
       company_id: companyId,
-      name: companyName
+      name: companyName,
+      email: email
     });
 
   } catch (err) {
@@ -173,15 +173,350 @@ export const ulogin = async (req, res) => {
       { expiresIn: "7d" }
     );
 
+    
     res.json({
       message: "Login successful",
-      token
+      email: email,
+      token:token,
     });
 
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 
+};
+
+// ---- user admin profile settings -----//
+
+export const ulogout = async (req, res) => {
+ try {
+    return res.json({
+      success: true,
+      message: "Logged out successfully"
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+};
+
+export const getuprofile = async (req, res) => {
+  try{
+    const { email } = req.body; 
+    const { data, error  } = await supabase.from("users").select("*").eq("email", email);
+    if(error){
+       return res.json({
+        success: false,
+        message: error.message
+      });
+    }
+    else{
+      return res.json({
+        success: true,
+        data:data[0]
+      })
+    }
+  }
+  catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+}
+
+export const edituprofile = async (req, res) => {
+  try{
+    const { name, email, oldemail } = req.body;
+    const { data:profile, error } = await supabase.from("users").update({
+      companyname:name,
+      email
+    }).eq("email", oldemail).select();
+
+    if(error){
+       return res.json({
+        success: false,
+        message: error.message
+      });
+    }
+    else{
+      return res.json({
+        success: true,
+        message: "profile updated",
+        data:profile[0]
+      })
+    }
+  }
+
+  catch(err){
+     res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+}
+
+export const changeupassword = async (req, res) => {
+  try {
+    const { email, oldpass, changedpass, confirmedpass } = req.body;
+
+    // 🔹 1. Validate input
+    if (!email || !oldpass || !changedpass || !confirmedpass) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required"
+      });
+    }
+
+    if (changedpass !== confirmedpass) {
+      return res.status(400).json({
+        success: false,
+        message: "New passwords do not match"
+      });
+    }
+
+    // 🔹 2. Get user from DB
+    const { data: user, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", email)
+      .single();
+
+    if (error || !user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // 🔹 3. Compare old password
+    const isMatch = await bcrypt.compare(oldpass, user.password);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: "Old password is incorrect"
+      });
+    }
+
+    // 🔹 4. Hash new password
+    const hashedPassword = await bcrypt.hash(changedpass, 10);
+
+    // 🔹 5. Update password
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({ password: hashedPassword })
+      .eq("email", email);
+
+    if (updateError) {
+      return res.status(400).json({
+        success: false,
+        message: updateError.message
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Password updated successfully"
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+};
+
+
+
+
+
+
+
+// -------------------------------------//
+
+export const Slogin = async (req, res) => {
+  try{
+    const { email, password } = req.body;
+
+    const { data, error } = await supabase
+      .from("admin")
+      .select("*")
+      .eq("email", email)
+      .single();
+
+    const validPassword = await bcrypt.compare(
+      password,
+      data.password
+    );
+
+    if (!validPassword) {
+      return res.status(401).json({
+        message: "Invalid password"
+      });
+    }
+    const token = jwt.sign(
+      { id: data.id },
+      "your_secret_key",
+      { expiresIn: "7d" }
+    );
+
+
+    res.json({
+      message: "Login successful",
+      name: data.email,
+      token:token
+    });
+
+  }
+  catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+export const Slogout = async (req, res) => {
+   try {
+    return res.json({
+      success: true,
+      message: "Logged out successfully"
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+};
+
+export const getprofile = async (req, res) => {
+  try{
+    const { email } = req.body; 
+    const { data, error  } = await supabase.from("admin").select("*").eq("email", email);
+    if(error){
+       return res.json({
+        success: false,
+        message: error.message
+      });
+    }
+    else{
+      return res.json({
+        success: true,
+        data:data[0]
+      })
+    }
+  }
+  catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+}
+
+export const editprofile = async (req, res) => {
+  try{
+    const { name, email, oldemail } = req.body;
+    const { data:profile, error } = await supabase.from("admin").update({
+      name,
+      email
+    }).eq("email", oldemail).select();
+
+    if(error){
+       return res.json({
+        success: false,
+        message: error.message
+      });
+    }
+    else{
+      return res.json({
+        success: true,
+        message: "profile updated",
+        data:profile[0]
+      })
+    }
+  }
+
+  catch(err){
+     res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+}
+
+export const changepassword = async (req, res) => {
+  try {
+    const { email, oldpass, changedpass, confirmedpass } = req.body;
+
+    // 🔹 1. Validate input
+    if (!email || !oldpass || !changedpass || !confirmedpass) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required"
+      });
+    }
+
+    if (changedpass !== confirmedpass) {
+      return res.status(400).json({
+        success: false,
+        message: "New passwords do not match"
+      });
+    }
+
+    // 🔹 2. Get user from DB
+    const { data: user, error } = await supabase
+      .from("admin")
+      .select("*")
+      .eq("email", email)
+      .single();
+
+    if (error || !user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // 🔹 3. Compare old password
+    const isMatch = await bcrypt.compare(oldpass, user.password);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: "Old password is incorrect"
+      });
+    }
+
+    // 🔹 4. Hash new password
+    const hashedPassword = await bcrypt.hash(changedpass, 10);
+
+    // 🔹 5. Update password
+    const { error: updateError } = await supabase
+      .from("admin")
+      .update({ password: hashedPassword })
+      .eq("email", email);
+
+    if (updateError) {
+      return res.status(400).json({
+        success: false,
+        message: updateError.message
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Password updated successfully"
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
 };
 
 
