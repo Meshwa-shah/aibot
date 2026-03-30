@@ -49,14 +49,25 @@ export default function Chat() {
   /* ---------------- SOCKET INIT (ONCE) ---------------- */
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const companyId = params.get("company") ||
-      localStorage.getItem("company_id") ||
-      "dental_clinic";
+     const params = new URLSearchParams(window.location.search);
+  const companyId = params.get("company");
 
-    localStorage.setItem("company_id", companyId);
-    console.log(localStorage.getItem("company_id"));
+  // 🔥 If no company_id → stop (important for widget)
+  if (!companyId) {
+    console.error("No company ID provided in URL");
+    return;
+  }
+
+  // store it
+  localStorage.setItem("company_id", companyId);
+
+  console.log("Company ID:", companyId);
   }, []);
+
+//   const companyId =
+//   window.CHATBOT_CONFIG?.company_id || "default";
+
+// localStorage.setItem("company_id", companyId);
 
   useEffect(() => {
     const company_id = localStorage.getItem("company_id");

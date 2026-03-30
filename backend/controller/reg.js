@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import * as cheerio from "cheerio";
 import { transporter } from "../index.js";
 import axios from 'axios';
+import { performServerHandshake } from "http2";
 
 
 
@@ -22,7 +23,51 @@ function generateCompanyId(companyName) {
 }
 
 export const generateEmbedScript = (companyId) => {
-  return `<script src="https://yourdomain.com/chatbot.js" data-company-id="${companyId}"></script>`;
+  return `<script src="https://yourdomain.com/chatbot.js" data-company-id="${companyId}"></script>
+  <script>
+  (function () {
+  const script = document.currentScript;
+  const companyId = script.getAttribute("data-company-id");
+
+  const container = document.createElement("div");
+  container.id = "chatbot-widget";
+  document.body.appendChild(container);
+
+  const button = document.createElement("button");
+  button.innerText = "💬";
+  button.style.position = "fixed";
+  button.style.bottom = "20px";
+  button.style.right = "20px";
+  button.style.zIndex = "9999";
+  button.style.padding = "12px";
+  button.style.borderRadius = "50%";
+  button.style.background = "#6366f1";
+  button.style.color = "white";
+  button.style.border = "none";
+  button.style.cursor = "pointer";
+
+  document.body.appendChild(button);
+
+  const iframe = document.createElement("iframe");
+  iframe.src = https://yourdomain.com/chat?company=${companyId};
+  iframe.style.position = "fixed";
+  iframe.style.bottom = "80px";
+  iframe.style.right = "20px";
+  iframe.style.width = "350px";
+  iframe.style.height = "500px";
+  iframe.style.border = "none";
+  iframe.style.borderRadius = "12px";
+  iframe.style.display = "none";
+  iframe.style.zIndex = "9999";
+
+  document.body.appendChild(iframe);
+
+  button.onclick = () => {
+    iframe.style.display =
+      iframe.style.display === "none" ? "block" : "none";
+  };
+})();
+ </script> `;
 };
 
 export async function scrapeAndSave(url, company_id) {
@@ -74,6 +119,7 @@ export const usignup = async (req, res) => {
         message: " Valid Email required"
       })
     }
+   
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const companyId = generateCompanyId(companyName);
@@ -95,7 +141,7 @@ export const usignup = async (req, res) => {
         companyname: companyName,
         is_paid: type === "Free" ? "FALSE" : "TRUE",
         trial_end: end,
-        phone: `+91${phone}`
+        phone: `+91 ${phone}`
       })
       .select()
       .single();
@@ -169,15 +215,14 @@ export const ulogin = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: data.id },
+      { id: data.company_id },
       "your_secret_key",
       { expiresIn: "7d" }
     );
-
-    
-    res.json({
+    const {data:user} = await supabase.from("users").select("id, email, created_at, companyname, company_id, isactive, script, phone").eq("email", email);
+     res.json({
       message: "Login successful",
-      data:data,
+      data:user[0],
       token:token,
     });
 
@@ -205,8 +250,8 @@ export const ulogout = async (req, res) => {
 
 export const getuprofile = async (req, res) => {
   try{
-    const { id } = req.body; 
-    const { data, error } = await supabase.from("users").select("*").eq("id", id);
+    const  id = req.user; 
+    const { data, error } = await supabase.from("users").select("id, email, trial_start, trial_end, is_paid, created_at, companyname, company_id, isactive, script, phone").eq("company_id", id);
     if(error){
        return res.json({
         success: false,
@@ -231,12 +276,13 @@ export const getuprofile = async (req, res) => {
 
 export const edituprofile = async (req, res) => {
   try{
-    const { name, email, phone, id } = req.body;
+    const { name, email, phone } = req.body;
+    const id = req.user;
     const { data:profile, error } = await supabase.from("users").update({
       companyname:name,
       email,
-      phone: `+91${phone}`
-    }).eq("id", id).select();
+      phone: phone
+    }).eq("company_id", id).select("email,  companyname,  phone");
 
     if(error){
        return res.json({
@@ -263,10 +309,10 @@ export const edituprofile = async (req, res) => {
 
 export const changeupassword = async (req, res) => {
   try {
-    const { email, oldpass, changedpass, confirmedpass } = req.body;
-
+    const { oldpass, changedpass, confirmedpass } = req.body;
+    const id = req.user;
     // 🔹 1. Validate input
-    if (!email || !oldpass || !changedpass || !confirmedpass) {
+    if (!id || !oldpass || !changedpass || !confirmedpass) {
       return res.status(400).json({
         success: false,
         message: "All fields are required"
@@ -284,7 +330,7 @@ export const changeupassword = async (req, res) => {
     const { data: user, error } = await supabase
       .from("users")
       .select("*")
-      .eq("email", email)
+      .eq("id", id)
       .single();
 
     if (error || !user) {
@@ -311,7 +357,7 @@ export const changeupassword = async (req, res) => {
     const { error: updateError } = await supabase
       .from("users")
       .update({ password: hashedPassword })
-      .eq("email", email);
+      .eq("id", id);
 
     if (updateError) {
       return res.status(400).json({
@@ -337,7 +383,7 @@ export const getUsers = async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("users")
-      .select("*")
+      .select("id, email, trial_start, trial_end, is_paid, created_at, companyname, company_id, isactive, script, phone")
       .order("created_at", { ascending: false }); // 🔥 newest first
 
     if (error) {
@@ -393,10 +439,11 @@ export const Slogin = async (req, res) => {
       { expiresIn: "7d" }
     );
 
+    const { data: user } = await supabase.from("admin").select("id, email, name, created_at, phone").eq("email", email);
 
     res.json({
       message: "Login successful",
-      data: data,
+      data: user[0],
       token:token
     });
 
@@ -422,7 +469,8 @@ export const Slogout = async (req, res) => {
 
 export const getprofile = async (req, res) => {
   try{
-    const { data, error } = await supabase.from("admin").select("*")
+    const id = req.user
+    const { data, error } = await supabase.from("admin").select("id, created_at, name, email, phone").eq("id", id);
     if(error){
        return res.json({
         success: false,
@@ -447,12 +495,13 @@ export const getprofile = async (req, res) => {
 
 export const editprofile = async (req, res) => {
   try{
-    const { name, email, phone, id } = req.body;
+    const { name, email, phone } = req.body;
+    const id = req.user;
     const { data:profile, error } = await supabase.from("admin").update({
       name,
       email,
-      phone: `+91${phone}`
-    }).eq("id", id).select();
+      phone: phone
+    }).eq("id", id).select("id, created_at, name, email, phone");
 
     if(error){
        return res.json({
@@ -479,10 +528,10 @@ export const editprofile = async (req, res) => {
 
 export const changepassword = async (req, res) => {
   try {
-    const { email, oldpass, changedpass, confirmedpass } = req.body;
-
+    const { oldpass, changedpass, confirmedpass } = req.body;
+    const id = req.user;
     // 🔹 1. Validate input
-    if (!email || !oldpass || !changedpass || !confirmedpass) {
+    if (!id || !oldpass || !changedpass || !confirmedpass) {
       return res.status(400).json({
         success: false,
         message: "All fields are required"
@@ -500,7 +549,7 @@ export const changepassword = async (req, res) => {
     const { data: user, error } = await supabase
       .from("admin")
       .select("*")
-      .eq("email", email)
+      .eq("id", id)
       .single();
 
     if (error || !user) {
@@ -527,7 +576,7 @@ export const changepassword = async (req, res) => {
     const { error: updateError } = await supabase
       .from("admin")
       .update({ password: hashedPassword })
-      .eq("email", email);
+      .eq("id", id);
 
     if (updateError) {
       return res.status(400).json({
@@ -581,7 +630,7 @@ export const auth = (req, res, next) => {
     const decoded = jwt.verify(token, "your_secret_key");
 
     // Attach user data to request
-    req.user = decoded;
+    req.user = decoded.id;
 
     next(); // go to next function (your controller)
   } catch (err) {
@@ -640,3 +689,70 @@ export const checkTrial = async (req, res, next) => {
   }
 
 };
+
+export const getuserstats = async(req, res) => {
+  try {
+    const id = req.user
+    const company_id = id
+    console.log(id);
+
+    const now = new Date();
+
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    // 🔹 Fetch chats for this user only
+    const { data, error } = await supabase
+      .from("chats")
+      .select("total_tokens, created_at")
+      .eq("company_id", company_id);
+
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    let totalChats = 0;
+    let monthlyChats = 0;
+    let totalTokens = 0;
+    let monthlyTokens = 0;
+
+    // 🔥 Single loop
+    data.forEach((row) => {
+      const tokens = row.total_tokens || 0;
+      const createdAt = new Date(row.created_at);
+
+      totalChats += 1;
+      totalTokens += tokens;
+
+      if (createdAt >= startOfMonth && createdAt < startOfNextMonth) {
+        monthlyChats += 1;
+        monthlyTokens += tokens;
+      }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        company_id,
+        total_chats: totalChats,
+        monthly_chats: monthlyChats,
+        total_tokens: totalTokens,
+        monthly_tokens: monthlyTokens,
+        month: now.toLocaleString("default", {
+          month: "long",
+          year: "numeric"
+        })
+      },
+      message: "user stats"
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+}

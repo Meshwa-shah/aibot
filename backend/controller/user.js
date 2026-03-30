@@ -7,16 +7,15 @@ dotenv.config();
 
 export const signup = async (req, res) => {
     try {
-        const { name, email, password } = req.body;
+        const { name, email, password, phone } = req.body;
         const encrypt = await bcrypt.hash(password, 10);
-        const { data, error } = await supabase.from('admin').insert([{ name: name, email: email, password: encrypt }]).select();
+        const { data, error } = await supabase.from('admin').insert([{ name: name, email: email, password: encrypt, phone: phone }]).select();
         if (error) {
             res.status(201).json({ success: false, message: error?.details });
         }
         else {
             const token = jwt.sign({ name, email }, process.env.JWT_KEY, { expiresIn: '1d' });
-            res.cookie('token', token, { httpOnly: true, sameSite: 'None', secure: true });
-            res.status(201).json({ success: true, message: "Hello user", data: data[0] });
+            res.status(201).json({ success: true, message: "Hello user", data: data[0], token: token });
         }
     }
     catch (err) {

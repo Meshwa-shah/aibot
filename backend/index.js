@@ -15,6 +15,8 @@ import chatroute from "./routes/chatroute.js";
 import { scrapeAndSave } from "./controller/reg.js";
 import { generateEmbedScript } from "./controller/reg.js";
 import { emailRegex } from "./controller/reg.js";
+import node from 'node-cron';
+
 
 dotenv.config();
 
@@ -32,7 +34,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(cors({
-  origin: process.env.FRONT_PORT,
+  origin: "*",
   credentials: true
 }));
 
@@ -433,114 +435,6 @@ app.post('/extrainfo', async (req, res) => {
 
 // ---- token usage related apis  ---- //
 
-app.get('/gettodaytokens', async (req, res) => {
-  try {
-
-    const now = new Date();
-
-    const startOfDay = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
-    );
-
-    const endOfDay = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() + 1
-    );
-
-    const { data, error } = await supabase
-      .from("chats")
-      .select("total_tokens")
-      .gte("created_at", startOfDay.toISOString())
-      .lt("created_at", endOfDay.toISOString());
-
-    if (error) {
-      return res.status(400).json({ success: false, message: error.message });
-    }
-
-    const total = data.reduce(
-      (sum, row) => sum + (row.total_tokens || 0),
-      0
-    );
-
-    res.json({
-      success: true,
-      total_tokens: total,
-      message: "fetched all tokens of today"
-    });
-
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-app.get('/getcurrentmonthtokens', async(req, res) => {
-  try {
-
-    const now = new Date();
-
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-
-    const { data, error } = await supabase
-      .from("chats")
-      .select("total_tokens")
-      .gte("created_at", startOfMonth.toISOString())
-      .lt("created_at", startOfNextMonth.toISOString());
-
-    if (error) {
-      return res.status(400).json({ success: false, message: error.message });
-    }
-
-    const total = data.reduce(
-      (sum, row) => sum + (row.total_tokens || 0),
-      0
-    );
-
-    res.json({
-      success: true,
-      message: "total tokens used in this month",
-      month: now.toLocaleString("default", {
-        month: "long",
-        year: "numeric"
-      }),
-      total_tokens: total
-    });
-
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-
-});
-
-app.get('/gettotaltokens', async(req, res) => {
-   try {
-
-    const { data, error } = await supabase
-      .from("chats")
-      .select("total_tokens");
-
-    if (error) {
-      return res.status(400).json({ success: false, message: error.message });
-    }
-
-    const total = data.reduce(
-      (sum, row) => sum + (row.total_tokens || 0),
-      0
-    );
-
-    res.json({
-      success: true,
-      total_tokens: total,
-      message: "your total tokens"
-    });
-
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
 
 app.get('/getmonthlytokens', async(req, res) => {
   try {
@@ -588,7 +482,109 @@ app.get('/getmonthlytokens', async(req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 
-})
+});
+
+app.get('/getsuperadminstats', async (req, res) => {
+   try {
+    const now = new Date();
+
+    // 🔹 Time ranges
+    const startOfDay = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    );
+
+    const endOfDay = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1
+    );
+
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    // 🔹 Fetch chats
+    const { data: chats, error: chatError } = await supabase
+      .from("chats")
+      .select("total_tokens, created_at, company_id");
+
+    if (chatError) throw chatError;
+
+    // 🔹 Fetch users (only needed fields)
+    const { data: users, error: userError } = await supabase
+      .from("users")
+      .select("company_id, companyname");
+
+    if (userError) throw userError;
+
+    // 🔥 Create map: company_id → companyname
+    const companyMap = {};
+    users.forEach((u) => {
+      companyMap[u.company_id] = u.companyname;
+    });
+
+    let todayTotal = 0;
+    let monthTotal = 0;
+    let overallTotal = 0;
+
+    const companyUsage = {};
+
+    // 🔥 Loop through chats
+    chats.forEach((row) => {
+      const tokens = row.total_tokens || 0;
+      const createdAt = new Date(row.created_at);
+
+      const companyName = companyMap[row.company_id] || "Unknown";
+
+      // totals
+      overallTotal += tokens;
+
+      if (createdAt >= startOfDay && createdAt < endOfDay) {
+        todayTotal += tokens;
+      }
+
+      if (createdAt >= startOfMonth && createdAt < startOfNextMonth) {
+        monthTotal += tokens;
+      }
+
+      // group by company name
+      if (!companyUsage[companyName]) {
+        companyUsage[companyName] = 0;
+      }
+
+      companyUsage[companyName] += tokens;
+    });
+
+    // 🔹 Sort all companies
+    const sortedUsers = Object.entries(companyUsage)
+      .map(([companyname, total_tokens]) => ({
+        companyname,
+        total_tokens
+      }))
+      .sort((a, b) => b.total_tokens - a.total_tokens);
+
+    const highestTokenUser = sortedUsers[0] || null;
+    const topUsers = sortedUsers.slice(0, 10);
+
+    res.json({
+      success: true,
+      message: "Dashboard stats fetched",
+      data: {
+        today_tokens: todayTotal,
+        month_tokens: monthTotal,
+        highest_token_user: highestTokenUser.total_tokens
+      },
+      user: topUsers
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+});
 
 
 app.get("/token-usage/:company_id", async (req, res) => {
@@ -813,7 +809,7 @@ app.post("/admin/toggle-active", async (req, res) => {
 
 app.get('/getactive', async (req, res) => {
   try{
-    const { data, error } = await supabase.from("users").select("*").eq("isactive", true);
+    const { data, error } = await supabase.from("users").select("id, email, trial_start, trial_end, is_paid, created_at, companyname, company_id, isactive, script, phone").eq("isactive", true);
     if(error){
       return res.json({
         success: false,
@@ -837,7 +833,7 @@ app.get('/getactive', async (req, res) => {
 
 app.get('/getinactive', async (req, res) => {
   try{
-    const { data, error } = await supabase.from("users").select("*").eq("isactive", false);
+    const { data, error } = await supabase.from("users").select("id, email, trial_start, trial_end, is_paid, created_at, companyname, company_id, isactive, script, phone").eq("isactive", false);
     if(error){
       return res.json({
         success: false,
@@ -872,7 +868,7 @@ app.post('/toggle-toactive', async (req, res) => {
       });
     }
     else{
-      const { data: users } = await supabase.from("users").select("*");
+      const { data: users } = await supabase.from("users").select("id, email, trial_start, trial_end, is_paid, created_at, companyname, company_id, isactive, script, phone");
       return res.json({
         success: true,
         data: users
@@ -900,7 +896,7 @@ app.post('/toggle-toinactive', async (req, res) => {
       });
     }
     else{
-      const { data: users } = await supabase.from("users").select("*");
+      const { data: users } = await supabase.from("users").select("id, email, trial_start, trial_end, is_paid, created_at, companyname, company_id, isactive, script, phone");
       return res.json({
         success: true,
         data: users
