@@ -190,3 +190,89 @@ export const getCurrentMonthChats = async (req, res) => {
     });
   }
 };
+
+export const getchats = async (req, res) => {
+   try {
+    const id = req.user;
+    const company_id = id;
+
+    if (!company_id) {
+      return res.status(400).json({
+        success: false,
+        message: "company_id is required"
+      });
+    }
+
+    // 🔹 1. Get company info
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("companyname, phone, created_at")
+      .eq("company_id", company_id)
+      .single();
+
+    if (userError || !user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // 🔹 2. Get all chats with title
+    const { data: chats, error: chatError } = await supabase
+      .from("chats")
+      .select("id, title, role, text, created_at, company_id")
+      .eq("company_id", company_id)
+      .not("title", "is", null)
+      .order("created_at", { ascending: true }); // 🔥 important
+
+    if (chatError) {
+      return res.status(400).json({
+        success: false,
+        message: chatError.message
+      });
+    }
+
+    // 🔥 3. Group by title
+    const titleMap = {};
+
+    chats.forEach((chat) => {
+      if (!titleMap[chat.title]) {
+        titleMap[chat.title] = {
+          id: chat.company_id, // first occurrence id
+          title: chat.title,
+          date: chat.created_at,
+          phone: user.phone,
+          registered_at: user.created_at,
+          chats: []
+        };
+      }
+
+      titleMap[chat.title].chats.push({
+        role: chat.role,
+        text: chat.text,
+        created_at: chat.created_at,
+        id: chat.id
+      });
+    });
+
+    // 🔹 Convert to array
+    const result = Object.values(titleMap);
+
+    // 🔹 Optional: latest titles first
+    result.sort(
+      (a, b) => new Date(b.first_date) - new Date(a.first_date)
+    );
+
+    res.json({
+      success: true,
+      res: result,
+      message: "your fetched data"
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+}

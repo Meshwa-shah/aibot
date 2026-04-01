@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { ulogin, usignup, auth, checkTrial, Slogin, Slogout, editprofile, getprofile, changepassword,
- edituprofile, getuprofile, changeupassword, ulogout, getUsers, getuserstats
+ edituprofile, getuprofile, changeupassword, ulogout, getUsers, getuserstats, forgotPassword
  } from "../controller/reg.js";
 
 const regrouter = Router();
@@ -23,13 +23,15 @@ regrouter.post(
 regrouter.post('/superlogin' ,Slogin);
 regrouter.post('/superlogout' ,Slogout);
 regrouter.post('/getprofile', auth ,getprofile)
-regrouter.post('/editprofile', auth, editprofile);
+regrouter.post('/updateprofile', auth, editprofile);
 regrouter.post('/changepassword',auth ,changepassword);
 regrouter.post('/getuserprofile', auth ,getuprofile)
-regrouter.post('/edituserprofile', auth , edituprofile);
+regrouter.post('/updateuserprofile', auth , edituprofile);
 regrouter.post('/changeuserpassword', auth, changeupassword);
 regrouter.post('/userLogout',  ulogout);
-regrouter.post('/gettotalusers', getUsers);
-regrouter.get('/getuserstats',auth, getuserstats);
+regrouter.post('/gettotalcustomers', getUsers);
+regrouter.post('/getusertokens',auth, getuserstats);
+regrouter.post('/forgotpassword', forgotPassword);
+
 
 export default regrouter;

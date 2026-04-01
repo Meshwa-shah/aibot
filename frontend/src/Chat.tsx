@@ -44,19 +44,19 @@ export default function Chat() {
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const socketRef = useRef<Socket | null>(null);
-  const email: string = "meshwashah91@gmail.com"; 
+ 
 
   /* ---------------- SOCKET INIT (ONCE) ---------------- */
 
   useEffect(() => {
-     const params = new URLSearchParams(window.location.search);
-  const companyId = params.get("company");
+   const params = new URLSearchParams(window.location.search);
+   const companyId = params.get("company");
 
   // 🔥 If no company_id → stop (important for widget)
-  if (!companyId) {
-    console.error("No company ID provided in URL");
-    return;
-  }
+   if (!companyId) {
+     console.error("No company ID provided in URL");
+     return;
+    }
 
   // store it
   localStorage.setItem("company_id", companyId);
@@ -75,7 +75,6 @@ export default function Chat() {
       auth: {
         visitor_id,
         company_id,
-        email
       }
     });
 

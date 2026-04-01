@@ -12,10 +12,11 @@ import userroute from "./routes/userroute.js";
 import addroute from "./routes/addroute.js";
 import regrouter from "./routes/regroute.js";
 import chatroute from "./routes/chatroute.js";
-import { scrapeAndSave } from "./controller/reg.js";
+import { auth, scrapeAndSave } from "./controller/reg.js";
 import { generateEmbedScript } from "./controller/reg.js";
 import { emailRegex } from "./controller/reg.js";
 import node from 'node-cron';
+
 
 
 dotenv.config();
@@ -37,6 +38,7 @@ app.use(cors({
   origin: "*",
   credentials: true
 }));
+app.use(express.static("public"));
 
 const port = process.env.PORT || 8081;
 
@@ -59,7 +61,7 @@ export const transporter = nodemailer.createTransport({
   }
 });
 
-async function sendInactiveEmail(session, company_id) {
+async function sendInactiveEmail(session, email) {
   //   try {
 
   //     // const { data: company } = await supabase
@@ -123,7 +125,7 @@ async function sendInactiveEmail(session, company_id) {
 
       from: process.env.EMAIL_USER,
 
-      to: company_id,
+      to: email,
 
       subject: "Visitor left the chatbot conversation",
 
@@ -242,31 +244,64 @@ ${knowledge}
 app.post("/latest-chat", async (req, res) => { const { visitor_id, company_id } = req.body; const { data: session } = await supabase.from("chat_sessions").select("id").eq("visitor_id", visitor_id).eq("company_id", company_id).maybeSingle(); if (!session) return res.json({ title: null }); const { data: chat } = await supabase.from("chats").select("title").eq("session_id", session.id).order("created_at", { ascending: false }).limit(1).maybeSingle(); res.json({ title: chat?.title ?? null }); });
 app.post("/chat-titles", async (req, res) => { const { visitor_id, company_id } = req.body; const { data: session } = await supabase.from("chat_sessions").select("id").eq("visitor_id", visitor_id).eq("company_id", company_id).maybeSingle(); if (!session) return res.json({ titles: [] }); const { data } = await supabase.from("chats").select("title").eq("session_id", session.id).not("title", "is", null).order("created_at", { ascending: false }); res.json({ titles: [...new Set(data.map(d => d.title))] }); });
 app.post("/chats", async (req, res) => { const { visitor_id, company_id, title } = req.body; const { data: session } = await supabase.from("chat_sessions").select("id").eq("visitor_id", visitor_id).eq("company_id", company_id).maybeSingle(); if (!session) return res.json({ data: [] }); const { data } = await supabase.from("chats").select("*").eq("session_id", session.id).eq("title", title).order("created_at", { ascending: true }); res.json({ data }); });
-app.post('/get-title', async (req, res) => {
+app.post('/user/get-title', auth ,async (req, res) => {
   try {
-    const { id } = req.body;
-    const { data: chats } = await supabase.from("chats").select("title").eq("session_id", id).not("title", "is", null).order("created_at", { ascending: false });
-    const { data: time } = await supabase.from("chats").select("created_at").eq("session_id", id).not("title", "is", null).order("created_at", { ascending: false });
+    const id = req.user;
+    console.log(id)
 
-    if (chats && time) {
-      res.status(201).json({ success: true, data: [...new Set(chats.map(c => c.title))], data2: [...new Set(time.map(t => t.created_at))] });
+    const { data, error } = await supabase
+      .from("chats")
+      .select("title, created_at")
+      .eq("company_id", id)
+      .not("title", "is", null)
+      .order("created_at", { ascending: true }); // 🔥 important
+
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
     }
-    else {
-      res.status(201).json({ success: false, message: "something went wrong" })
-    }
-  }
-  catch (err) {
-    res.status(500).json({ message: err.message });
+
+    // 🔥 Map: title → first time
+    const titleMap = {};
+
+    data.forEach((row) => {
+      if (!titleMap[row.title]) {
+        // since sorted ascending → first occurrence = earliest
+        titleMap[row.title] = row.created_at;
+      }
+    });
+
+    // 🔹 Convert to array
+    const result = Object.entries(titleMap).map(
+      ([title, created_at]) => ({
+        title,
+        time: created_at
+      })
+    );
+
+    res.json({
+      success: true,
+      data: result,
+      message: "Titles with first chat time fetched"
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 });
 
-app.post('/get-chat', async (req, res) => {
+app.post('/get-chat', auth, async (req, res) => {
   try {
-    const { id, title } = req.body;
-    const { data: chats } = await supabase.from("chats").select("*").eq("session_id", id).eq("title", title).order("created_at", { ascending: true });
+    const { title } = req.body;
+    const id = req.user;
+    const { data: chats } = await supabase.from("chats").select("id, created_at, role, text, company_id").eq("company_id", id).eq("title", title).order("created_at", { ascending: true });
     if (chats) {
-      const { data: session } = await supabase.from("chat_sessions").select("user_name").eq("id", id);
-      res.status(201).json({ success: true, chat: chats, name: session });
+      res.status(201).json({ success: true, chat: chats, message: "your chats fetched" });
     }
     else {
       res.status(201).json({ success: false, message: "something went wrong" });
@@ -275,7 +310,9 @@ app.post('/get-chat', async (req, res) => {
   catch (err) {
     res.status(500).json({ message: err.message });
   }
-})
+});
+
+
 
 // ---- web scraping ----- //
 const isValidUrl = (url) => {
@@ -309,6 +346,10 @@ app.post("/scrape-website", async (req, res) => {
     .from("users")
     .select("company_id")
     .eq("company_id", company_id);
+  
+  const { data:add } = await supabase.from("users").insert({
+    url: url
+  }).eq("company_id", company_id);
 
   if (error) {
     return res.json({
@@ -484,7 +525,7 @@ app.get('/getmonthlytokens', async(req, res) => {
 
 });
 
-app.get('/getsuperadminstats', async (req, res) => {
+app.post('/getsuperadminstats', async (req, res) => {
    try {
     const now = new Date();
 
@@ -569,7 +610,7 @@ app.get('/getsuperadminstats', async (req, res) => {
 
     res.json({
       success: true,
-      message: "Dashboard stats fetched",
+      message: "Dashboard tokens fetched successfully",
       data: {
         today_tokens: todayTotal,
         month_tokens: monthTotal,
@@ -745,9 +786,6 @@ app.get("/admin/companyname", async (req, res) => {
       });
     }
 
-
-
-
     res.json({
       success: true,
       data: data
@@ -807,9 +845,9 @@ app.post("/admin/toggle-active", async (req, res) => {
   }
 });
 
-app.get('/getactive', async (req, res) => {
+app.post('/getcustomeractive', async (req, res) => {
   try{
-    const { data, error } = await supabase.from("users").select("id, email, trial_start, trial_end, is_paid, created_at, companyname, company_id, isactive, script, phone").eq("isactive", true);
+    const { data, error } = await supabase.from("users").select("email, companyname, company_id, isactive,  phone, url").eq("isactive", true);
     if(error){
       return res.json({
         success: false,
@@ -831,9 +869,9 @@ app.get('/getactive', async (req, res) => {
   }
 });
 
-app.get('/getinactive', async (req, res) => {
+app.post('/getcustomerinactive', async (req, res) => {
   try{
-    const { data, error } = await supabase.from("users").select("id, email, trial_start, trial_end, is_paid, created_at, companyname, company_id, isactive, script, phone").eq("isactive", false);
+    const { data, error } = await supabase.from("users").select("email,  companyname, company_id, isactive, phone, url").eq("isactive", false);
     if(error){
       return res.json({
         success: false,
@@ -855,62 +893,59 @@ app.get('/getinactive', async (req, res) => {
   }
 });
 
-app.post('/toggle-toactive', async (req, res) => {
-  try{
-    const { id } = req.body;
-    const { data, error } = await supabase.from("users").update({
-      isactive: true
-    }).eq("company_id", id);
-    if(error){
-       return res.json({
+app.post('/toggle', async (req, res) => {
+  try {
+    const { company_id,status } = req.body;
+    const id = company_id;
+
+    // 🔹 Validate input
+    if (typeof status === "undefined" || !id) {
+      return res.status(400).json({
+        success: false,
+        message: "id and status are required"
+      });
+    }
+
+    // 🔹 Convert 0/1 → boolean
+    const isActive = status == 1;
+
+    // 🔹 Update user
+    const { error } = await supabase
+      .from("users")
+      .update({ isactive: isActive })
+      .eq("company_id", id);
+
+    if (error) {
+      return res.json({
         success: false,
         message: error.message
       });
     }
-    else{
-      const { data: users } = await supabase.from("users").select("id, email, trial_start, trial_end, is_paid, created_at, companyname, company_id, isactive, script, phone");
+
+    // 🔹 Fetch updated users
+    const { data: users, error: fetchError } = await supabase
+      .from("users")
+      .select(" email, companyname, company_id, isactive, phone, url");
+
+    if (fetchError) {
       return res.json({
-        success: true,
-        data: users
+        success: false,
+        message: fetchError.message
       });
     }
-  }
-   catch(err){
+
+    return res.json({
+      success: true,
+      message: `User is now ${isActive ? "active" : "inactive"}`,
+    });
+
+  } catch (err) {
     res.status(500).json({
       success: false,
       message: err.message
     });
   }
 });
-
-app.post('/toggle-toinactive', async (req, res) => {
-  try{
-    const { id } = req.body;
-    const { data, error } = await supabase.from("users").update({
-      isactive: false
-    }).eq("company_id", id);
-    if(error){
-       return res.json({
-        success: false,
-        message: error.message
-      });
-    }
-    else{
-      const { data: users } = await supabase.from("users").select("id, email, trial_start, trial_end, is_paid, created_at, companyname, company_id, isactive, script, phone");
-      return res.json({
-        success: true,
-        data: users
-      });
-    }
-  }
-   catch(err){
-    res.status(500).json({
-      success: false,
-      message: err.message
-    });
-  }
-})
-
 /* -------- plans apis -------- */
 app.post("/admin/create-plan", async (req, res) => {
   try {
@@ -1123,7 +1158,16 @@ app.get('/getplans', async (req, res) => {
       message: err.message
     });
   }
-})
+});
+
+async function getmail(id){
+  const { data, error } = await supabase.from("users").select("email").eq("company_id", id);
+  return data[0]
+}
+
+
+
+
 
 async function isChatbotActive(company_id) {
   const { data, error } = await supabase
@@ -1146,7 +1190,7 @@ async function isChatbotActive(company_id) {
 
 io.on("connection", async (socket) => {
 
-  const { visitor_id, company_id, email } = socket.handshake.auth;
+  const { visitor_id, company_id } = socket.handshake.auth;
 
   if (!visitor_id || !company_id) return socket.disconnect();
 
@@ -1155,6 +1199,8 @@ io.on("connection", async (socket) => {
 
     const session = await getOrCreateSession(visitor_id, company_id);
     const isActive = await isChatbotActive(company_id);
+    const em = await getmail("apollo-oifq");
+    const email = em.email;
 
     if (!isActive) {
       await supabase.from("chats").insert({
@@ -1381,5 +1427,5 @@ io.on("connection", async (socket) => {
 });
 
 server.listen(port, "0.0.0.0", () => {
-  console.log(`Server running on "http://192.168.1.16:${port}"`);
+  console.log(`Server running on "http://192.168.1.6:${port}"`);
 });

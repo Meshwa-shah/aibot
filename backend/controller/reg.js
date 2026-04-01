@@ -4,7 +4,9 @@ import bcrypt from 'bcrypt';
 import * as cheerio from "cheerio";
 import { transporter } from "../index.js";
 import axios from 'axios';
-import { performServerHandshake } from "http2";
+import crypto from 'crypto';
+import nodemailer from 'nodemailer';
+
 
 
 
@@ -23,51 +25,7 @@ function generateCompanyId(companyName) {
 }
 
 export const generateEmbedScript = (companyId) => {
-  return `<script src="https://yourdomain.com/chatbot.js" data-company-id="${companyId}"></script>
-  <script>
-  (function () {
-  const script = document.currentScript;
-  const companyId = script.getAttribute("data-company-id");
-
-  const container = document.createElement("div");
-  container.id = "chatbot-widget";
-  document.body.appendChild(container);
-
-  const button = document.createElement("button");
-  button.innerText = "💬";
-  button.style.position = "fixed";
-  button.style.bottom = "20px";
-  button.style.right = "20px";
-  button.style.zIndex = "9999";
-  button.style.padding = "12px";
-  button.style.borderRadius = "50%";
-  button.style.background = "#6366f1";
-  button.style.color = "white";
-  button.style.border = "none";
-  button.style.cursor = "pointer";
-
-  document.body.appendChild(button);
-
-  const iframe = document.createElement("iframe");
-  iframe.src = https://yourdomain.com/chat?company=${companyId};
-  iframe.style.position = "fixed";
-  iframe.style.bottom = "80px";
-  iframe.style.right = "20px";
-  iframe.style.width = "350px";
-  iframe.style.height = "500px";
-  iframe.style.border = "none";
-  iframe.style.borderRadius = "12px";
-  iframe.style.display = "none";
-  iframe.style.zIndex = "9999";
-
-  document.body.appendChild(iframe);
-
-  button.onclick = () => {
-    iframe.style.display =
-      iframe.style.display === "none" ? "block" : "none";
-  };
-})();
- </script> `;
+  return `<script src="${process.env.BACK_URL}/widget.js" data-company-id="${companyId}"></script>`;
 };
 
 export async function scrapeAndSave(url, company_id) {
@@ -107,7 +65,7 @@ export const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export const usignup = async (req, res) => {
   try {
 
-    const { email, password, companyName, type, duration, phone } = req.body;
+    const { email, password, companyName, type, duration, phone, url } = req.body;
 
     if (!email || !password || !companyName) {
       return res.status(400).json({
@@ -123,6 +81,7 @@ export const usignup = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const companyId = generateCompanyId(companyName);
+    const result = scrapeAndSave(url, companyName);
     const days = duration.match(/\d+/)
       ? parseInt(duration.match(/\d+/)[0])
       : 0;
@@ -141,7 +100,8 @@ export const usignup = async (req, res) => {
         companyname: companyName,
         is_paid: type === "Free" ? "FALSE" : "TRUE",
         trial_end: end,
-        phone: `+91 ${phone}`
+        phone: phone,
+        url: url
       })
       .select()
       .single();
@@ -219,7 +179,7 @@ export const ulogin = async (req, res) => {
       "your_secret_key",
       { expiresIn: "7d" }
     );
-    const {data:user} = await supabase.from("users").select("id, email, created_at, companyname, company_id, isactive, script, phone").eq("email", email);
+    const {data:user} = await supabase.from("users").select("email, companyname, company_id, phone").eq("email", email);
      res.json({
       message: "Login successful",
       data:user[0],
@@ -251,7 +211,7 @@ export const ulogout = async (req, res) => {
 export const getuprofile = async (req, res) => {
   try{
     const  id = req.user; 
-    const { data, error } = await supabase.from("users").select("id, email, trial_start, trial_end, is_paid, created_at, companyname, company_id, isactive, script, phone").eq("company_id", id);
+    const { data, error } = await supabase.from("users").select("email, companyname, phone").eq("company_id", id);
     if(error){
        return res.json({
         success: false,
@@ -330,7 +290,7 @@ export const changeupassword = async (req, res) => {
     const { data: user, error } = await supabase
       .from("users")
       .select("*")
-      .eq("id", id)
+      .eq("company_id", id)
       .single();
 
     if (error || !user) {
@@ -357,7 +317,7 @@ export const changeupassword = async (req, res) => {
     const { error: updateError } = await supabase
       .from("users")
       .update({ password: hashedPassword })
-      .eq("id", id);
+      .eq("company_id", id);
 
     if (updateError) {
       return res.status(400).json({
@@ -383,7 +343,7 @@ export const getUsers = async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("users")
-      .select("id, email, trial_start, trial_end, is_paid, created_at, companyname, company_id, isactive, script, phone")
+      .select("email, companyname, company_id, isactive, phone, url")
       .order("created_at", { ascending: false }); // 🔥 newest first
 
     if (error) {
@@ -439,7 +399,7 @@ export const Slogin = async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    const { data: user } = await supabase.from("admin").select("id, email, name, created_at, phone").eq("email", email);
+    const { data: user } = await supabase.from("admin").select("id, email, name, phone").eq("email", email);
 
     res.json({
       message: "Login successful",
@@ -470,7 +430,7 @@ export const Slogout = async (req, res) => {
 export const getprofile = async (req, res) => {
   try{
     const id = req.user
-    const { data, error } = await supabase.from("admin").select("id, created_at, name, email, phone").eq("id", id);
+    const { data, error } = await supabase.from("admin").select("id, name, email, phone").eq("id", id);
     if(error){
        return res.json({
         success: false,
@@ -501,7 +461,7 @@ export const editprofile = async (req, res) => {
       name,
       email,
       phone: phone
-    }).eq("id", id).select("id, created_at, name, email, phone");
+    }).eq("id", id).select("id, name, email, phone");
 
     if(error){
        return res.json({
@@ -694,7 +654,7 @@ export const getuserstats = async(req, res) => {
   try {
     const id = req.user
     const company_id = id
-    console.log(id);
+
 
     const now = new Date();
 
@@ -736,17 +696,12 @@ export const getuserstats = async(req, res) => {
     res.json({
       success: true,
       data: {
-        company_id,
         total_chats: totalChats,
         monthly_chats: monthlyChats,
         total_tokens: totalTokens,
         monthly_tokens: monthlyTokens,
-        month: now.toLocaleString("default", {
-          month: "long",
-          year: "numeric"
-        })
       },
-      message: "user stats"
+      message: "users token fetched successfully"
     });
 
   } catch (err) {
@@ -756,3 +711,73 @@ export const getuserstats = async(req, res) => {
     });
   }
 }
+
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // 🔹 Check user
+    const { data: user, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", email)
+      .single();
+
+    if (error || !user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // 🔥 Generate random 8-char password
+    const tempPassword = Math.random().toString(36).slice(-8);
+
+    // 🔹 Hash password
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+    // 🔹 Update password in DB
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({ password: hashedPassword }).eq("email", email);
+
+    if (updateError) {
+      return res.status(400).json({
+        success: false,
+        message: updateError.message
+      });
+    }
+
+    // 🔹 Send email
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    });
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Your Temporary Password",
+      html: `
+        <h3>Password Reset</h3>
+        <p>Your new temporary password is:</p>
+        <h2>${tempPassword}</h2>
+        <p>Please login and change your password immediately.</p>
+      `
+    });
+
+    res.json({
+      success: true,
+      message: "password sent to email"
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+};

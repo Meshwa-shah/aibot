@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 
+
 dotenv.config();
 
 export const signup = async (req, res) => {
@@ -80,13 +81,14 @@ export const verify = async (req, res) => {
 
 export const fetchusers = async (req, res) => {
     try{
-        const { company_id } = req.body;
-        const { data, error } = await supabase.from('chat_sessions').select('*').eq("company_id", company_id);
+        const id = req.user;
+        const company_id = id;
+        const { data, error } = await supabase.from('chat_sessions').select('id, user_name, phone, email, company_id').eq("company_id", company_id);
         if(error){
             return res.status(201).json({ success:false, message:"something went wrong" });
         }
         else{
-            return res.status(201).json({ success:true, data:data });
+            return res.status(201).json({ success:true, data:data, message: "users fetched successfully" });
         }
     }
 
@@ -94,3 +96,42 @@ export const fetchusers = async (req, res) => {
         res.status(500).json({ messagE:err.message });
     }
 }
+
+export const auth1 = (req, res, next) => {
+
+   try {
+    const authHeader = req.headers.authorization;
+
+    // Check if header exists
+    if (!authHeader) {
+      return res.status(401).json({
+        success: false,
+        message: "No token provided"
+      });
+    }
+
+    // Extract token (Bearer TOKEN)
+    const token = authHeader.split(" ")[1];
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid token format"
+      });
+    }
+
+    // Verify token
+    const decoded = jwt.verify(token, "your_secret_key");
+
+    // Attach user data to request
+    req.user = decoded.id;
+
+    next(); // go to next function (your controller)
+  } catch (err) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid or expired token"
+    });
+  }
+};
+
