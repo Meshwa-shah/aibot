@@ -52,18 +52,17 @@ export default function Chat() {
    const params = new URLSearchParams(window.location.search);
    const companyId = params.get("company");
 
-  // 🔥 If no company_id → stop (important for widget)
+   // 🔥 If no company_id → stop (important for widget)
    if (!companyId) {
      console.error("No company ID provided in URL");
      return;
     }
-
   // store it
   localStorage.setItem("company_id", companyId);
 
   console.log("Company ID:", companyId);
   }, []);
-
+        
 //   const companyId =
 //   window.CHATBOT_CONFIG?.company_id || "default";
 
@@ -113,7 +112,6 @@ export default function Chat() {
         `${import.meta.env.VITE_BACK_URL}/latest-chat`,
         { visitor_id, company_id }
       );
-      console.log(res)
       setActiveTitle(res.data.title);
       setTitle(res.data.title);
     }

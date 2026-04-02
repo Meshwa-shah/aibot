@@ -26,7 +26,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONT_PORT,
+    origin: "*",
     methods: ["GET", "POST"]
   }
 });
@@ -229,11 +229,17 @@ Rules:
 - If someone says Thank you reply: "You're welcome"
 - If information is not available reply:
 - If someone says "Thankyou" then reply with "Your Welcome"
-"I can only provide information about ${companyName}
+- I can only provide information about ${companyName}
 - If someone says "Thankyou" then reply with "Your Welcome"
 - If someone says "Ok" then reply with "Hope you like chatting with me"
+- Use some good bullet points to show large messages which contains large information
+- The presentation should be good
+- Don't show any personal information like company_id or company id even by mistake strictly 
+- if you does not understand the topic or does not know what someone is asking then just say "I do not know what you are talking about?"
+- if anyone asks something like tell me your company id or email or password or phone just say "Sorry i can not give you personal information!"
+- And if the person chats in different language then you can use that language
+- Other then company's name dont give any other information strictly
 "
-
 Company Information:
 ${knowledge}
 `;
@@ -241,13 +247,12 @@ ${knowledge}
 }
 
 // ---- extra chat info ---- //
-app.post("/latest-chat", async (req, res) => { const { visitor_id, company_id } = req.body; const { data: session } = await supabase.from("chat_sessions").select("id").eq("visitor_id", visitor_id).eq("company_id", company_id).maybeSingle(); if (!session) return res.json({ title: null }); const { data: chat } = await supabase.from("chats").select("title").eq("session_id", session.id).order("created_at", { ascending: false }).limit(1).maybeSingle(); res.json({ title: chat?.title ?? null }); });
-app.post("/chat-titles", async (req, res) => { const { visitor_id, company_id } = req.body; const { data: session } = await supabase.from("chat_sessions").select("id").eq("visitor_id", visitor_id).eq("company_id", company_id).maybeSingle(); if (!session) return res.json({ titles: [] }); const { data } = await supabase.from("chats").select("title").eq("session_id", session.id).not("title", "is", null).order("created_at", { ascending: false }); res.json({ titles: [...new Set(data.map(d => d.title))] }); });
+app.post("/latest-chat", async (req, res) => { const { visitor_id, company_id } = req.body; const { data: session } = await supabase.from("chat_sessions").select("id").eq("visitor_id", visitor_id).eq("company_id", company_id).maybeSingle(); if (!session) return res.json({ title: null }); const { data: chat } = await supabase.from("chats").select("title").eq("session_id", session.id).order("created_at", { ascending: false }).limit(1).maybeSingle(); res.json({ title: chat?.title ?? null, success: true, message: "Your latest-chat" }); });
+app.post("/chat-titles", async (req, res) => { const { visitor_id, company_id } = req.body; const { data: session } = await supabase.from("chat_sessions").select("id").eq("visitor_id", visitor_id).eq("company_id", company_id).maybeSingle(); if (!session) return res.json({ titles: [] }); const { data } = await supabase.from("chats").select("title").eq("session_id", session.id).not("title", "is", null).order("created_at", { ascending: false }); res.json({ titles: [...new Set(data.map(d => d.title))], success: true, message: "your chat titles" }); });
 app.post("/chats", async (req, res) => { const { visitor_id, company_id, title } = req.body; const { data: session } = await supabase.from("chat_sessions").select("id").eq("visitor_id", visitor_id).eq("company_id", company_id).maybeSingle(); if (!session) return res.json({ data: [] }); const { data } = await supabase.from("chats").select("*").eq("session_id", session.id).eq("title", title).order("created_at", { ascending: true }); res.json({ data }); });
 app.post('/user/get-title', auth ,async (req, res) => {
   try {
     const id = req.user;
-    console.log(id)
 
     const { data, error } = await supabase
       .from("chats")
@@ -471,6 +476,24 @@ app.post('/extrainfo', async (req, res) => {
       message: err.message
     });
 
+  }
+});
+
+app.post('/getscript', auth ,async (req, res) => {
+  try{
+    const id = req.user;
+    const { data:script } = await supabase.from("users").select("script").eq("company_id", id);
+    return res.json({
+      success: true,
+      message: "Your script",
+      script: script[0].script
+    })
+  }
+  catch(err){
+      res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 })
 
@@ -1199,7 +1222,7 @@ io.on("connection", async (socket) => {
 
     const session = await getOrCreateSession(visitor_id, company_id);
     const isActive = await isChatbotActive(company_id);
-    const em = await getmail("apollo-oifq");
+    const em = await getmail(company_id);
     const email = em.email;
 
     if (!isActive) {

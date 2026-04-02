@@ -65,7 +65,7 @@ export const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export const usignup = async (req, res) => {
   try {
 
-    const { email, password, companyName, type, duration, phone, url } = req.body;
+    const { email, password, companyName, type, phone, url } = req.body;
 
     if (!email || !password || !companyName) {
       return res.status(400).json({
@@ -82,9 +82,11 @@ export const usignup = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const companyId = generateCompanyId(companyName);
     const result = scrapeAndSave(url, companyName);
-    const days = duration.match(/\d+/)
-      ? parseInt(duration.match(/\d+/)[0])
-      : 0;
+    const script = generateEmbedScript(companyId);
+    // const days = duration.match(/\d+/)
+    //   ? parseInt(duration.match(/\d+/)[0])
+    //   : 0;
+    const days = type === "Free" ? 0 : 30
 
     const start = new Date();
     const end = new Date();
@@ -101,7 +103,8 @@ export const usignup = async (req, res) => {
         is_paid: type === "Free" ? "FALSE" : "TRUE",
         trial_end: end,
         phone: phone,
-        url: url
+        url: url,
+        script: script
       })
       .select()
       .single();

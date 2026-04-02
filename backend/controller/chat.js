@@ -45,7 +45,8 @@ export const sendchats = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: chats || []
+      data: chats || [],
+      message: "your chats"
     });
 
   } catch (err) {
