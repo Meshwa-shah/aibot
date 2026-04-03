@@ -204,7 +204,7 @@ export default function Chat() {
         <div className="flex-1 flex justify-center p-4">
           <div className="w-full max-w-3xl h-[80vh] bg-white/5 backdrop-blur-xl rounded-xl flex flex-col border border-gray-700">
 
-            {/* HEADER */}
+           {/* HEADER */}
             <div className="p-4 border-b border-slate-700 flex items-center gap-2">
               <Bot className="text-indigo-400" />
               <h1 className="text-white font-semibold">
@@ -212,7 +212,7 @@ export default function Chat() {
               </h1>
             </div>
 
-            {/* MESSAGES */}
+          {/* MESSAGES */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
               <button
                 onClick={newChat}

@@ -1220,7 +1220,7 @@ io.on("connection", async (socket) => {
 
   try {
 
-    const session = await getOrCreateSession(visitor_id, company_id);
+    const session = await  getOrCreateSession(visitor_id, company_id);
     const isActive = await isChatbotActive(company_id);
     const em = await getmail(company_id);
     const email = em.email;
@@ -1314,7 +1314,7 @@ io.on("connection", async (socket) => {
 
           delete inactivityTimers[session.id];
 
-        }, 2 * 60 * 1000);
+        }, 15 * 60 * 1000);
 
         /* ---------- ASK EMAIL ---------- */
 

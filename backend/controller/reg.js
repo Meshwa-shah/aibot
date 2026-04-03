@@ -182,8 +182,8 @@ export const ulogin = async (req, res) => {
       "your_secret_key",
       { expiresIn: "7d" }
     );
-    const {data:user} = await supabase.from("users").select("email, companyname, company_id, phone").eq("email", email);
-     res.json({
+    const { data: user } = await supabase.from("users").select("email, companyname, company_id, phone").eq("email", email);
+    res.json({
       message: "Login successful",
       data:user[0],
       token:token,
@@ -214,7 +214,7 @@ export const ulogout = async (req, res) => {
 export const getuprofile = async (req, res) => {
   try{
     const  id = req.user; 
-    const { data, error } = await supabase.from("users").select("email, companyname, phone").eq("company_id", id);
+    const { data, error } = await supabase.from("users").select("email, companyname, phone, script").eq("company_id", id);
     if(error){
        return res.json({
         success: false,
@@ -226,7 +226,7 @@ export const getuprofile = async (req, res) => {
         success: true,
         message: "Your profile fetched",
         data:data[0]
-      })
+      });
     }
   }
   catch (err) {
