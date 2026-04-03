@@ -119,7 +119,7 @@ export const usignup = async (req, res) => {
       text: `Your email is : ${email}, your password is: ${password} and your company id is: ${companyId}
       and your script is: "${script}" please add it in your website
       `
-    })
+    });
 
     if (error) {
       return res.status(400).json({
