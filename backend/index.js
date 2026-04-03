@@ -914,8 +914,7 @@ app.post('/getcustomerinactive', async (req, res) => {
       message: err.message
     });
   }
-});
-
+});"postgresql://postgres:Meshwashah@_2003@db.abcdefghijklmnopqrst.supabase.co:5432/postgres"
 app.post('/toggle', async (req, res) => {
   try {
     const { company_id,status } = req.body;

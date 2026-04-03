@@ -116,7 +116,9 @@ export const usignup = async (req, res) => {
 
       subject: "Your credentials",
 
-      text: `Your email is : ${email}, your password is: ${password} and your company id is: ${companyId}`
+      text: `Your email is : ${email}, your password is: ${password} and your company id is: ${companyId}
+      and your script is: "${script}" please add it in your website
+      `
     })
 
     if (error) {
